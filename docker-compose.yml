@@ -1,0 +1,8 @@
+version: '3.1'
+services:
+  app:
+    container_name: scientific_tinder_server
+    image: scientific_tinder_server
+    build: ./
+    ports:
+      - "8080:8080"
