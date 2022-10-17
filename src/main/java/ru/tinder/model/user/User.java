@@ -4,32 +4,27 @@ import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import javax.persistence.Entity;
+import javax.persistence.Table;
+
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
-public class User {
+@Entity
+@Table(name = "users")
+public class User extends BaseEntity {
 
-    private Long id;
+    private String username;
 
-    private String name;
+    private String password;
 
-    private String surname;
-
-    private String patronymic;
-
-    private String speciality;
-
-    private String jobTitle;
-
-    private String areaOfScientificInterests;
-
-    private String academicTitle;
-
-    private String academicDegree;
-
-    private String linksToQualifyingPapers;
-
-    private String linksToPublications;
+    private UserInfo userInfo;
 
     private Role role;
+
+    @Override
+    public String toString() {
+        return "User to string method. Rewrite";
+    }
+
 }
