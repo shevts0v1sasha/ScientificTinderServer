@@ -9,4 +9,6 @@ public interface UserController {
     Response<User> getUserInfo(Long userId);
     Response<List<User>> getAllUsers();
 
+    Response<List<User>> getLikedUsers(Long userId);
+
 }

@@ -1,38 +1,43 @@
 package ru.tinder.controller;
 
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import ru.tinder.dto.auth.LoginRequest;
+import ru.tinder.dto.chat.CreateGroupChatRequest;
 import ru.tinder.model.TDate;
 import ru.tinder.model.chat.Chat;
+import ru.tinder.model.chat.ChatInfo;
 import ru.tinder.model.chat.ChatMessage;
+import ru.tinder.model.match.Match;
 import ru.tinder.model.notification.Notification;
 import ru.tinder.model.notification.NotificationType;
 import ru.tinder.model.response.Response;
 import ru.tinder.model.response.ResponseStatus;
 import ru.tinder.model.user.User;
 import ru.tinder.service.chatService.ChatService;
+import ru.tinder.service.matchService.MatchService;
 import ru.tinder.service.notificationService.NotificationService;
 import ru.tinder.service.userService.UserService;
+import ru.tinder.utils.FileManager;
 import ru.tinder.utils.IdGenerator;
 import ru.tinder.utils.Utils;
 
+import java.io.IOException;
 import java.time.LocalDateTime;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class Controller implements AuthController, UserController, MatchController, NotificationLogic, ChatController {
 
     private final UserService userService;
     private final NotificationService notificationService;
-    private final ConcurrentHashMap<Long, Set<Long>> matches = new ConcurrentHashMap<>() {{
-        put(1L, new HashSet<>() {{ add(0L);}});
-    }};
-
     private final ChatService chatService;
+    private final MatchService matchService;
 
     @Override
     public Response<User> login(LoginRequest request) {
@@ -59,39 +64,61 @@ public class Controller implements AuthController, UserController, MatchControll
     }
 
     @Override
-    public Response<Boolean> match(Long userId, Long matchedUser) {
-        System.out.printf("Match userId=%d, matchedUser=%d%n", userId, matchedUser);
-        if (!matches.containsKey(userId)) {
-            matches.put(userId, new HashSet<>());
+    public Response<List<User>> getLikedUsers(Long userId) {
+        List<Chat> chatByParticipantId = chatService.getChatByParticipantId(userId);
+        final List<Long> res = chatByParticipantId.stream().flatMap(chat -> chat.getParticipants().stream()).distinct().filter(id -> !id.equals(userId)).collect(Collectors.toList());
+//        List<Long> res = matchService.getLikedIds(userId);
+        List<User> likedUsers = new ArrayList<>(res.size());
+        for (Long id : res) {
+            Optional<User> userById = userService.findUserById(id);
+            if (userById.isPresent()) {
+                likedUsers.add(userById.get());
+            }
         }
-        matches.get(userId).add(matchedUser);
+        return new Response<>(likedUsers, ResponseStatus.OK, "");
+    }
 
-        if (matches.containsKey(matchedUser) && matches.get(matchedUser).contains(userId)) {
-            final TDate currentTime = Utils.getCurrentTime();
-            Optional<User> userById = userService.findUserById(userId);
-            Optional<User> matchedUserById = userService.findUserById(matchedUser);
-            notificationService.sendNotification(new Notification(IdGenerator.getUniqueId(), userId, currentTime,
-                    String.format("Новый метч с %s %s!", matchedUserById.get().getUserInfo().getName(), matchedUserById.get().getUserInfo().getSurname()), false, NotificationType.MATCH));
+    private void onMutualMatch(Match match) {
+        final TDate currentTime = Utils.getCurrentTime();
+        Long whoId = match.getWhoId();
+        Long whomId = match.getWhomId();
+            Optional<User> whoById = userService.findUserById(whoId);
+            Optional<User> whomById = userService.findUserById(whomId);
+            if (whoById.isPresent() && whomById.isPresent()) {
+                User who = whoById.get();
+                User whom = whomById.get();
+                Chat chat = new Chat(IdGenerator.getUniqueId(), List.of(whoId, whomId));
+                Optional<Chat> optionalChat = chatService.addChat(chat);
+                if (optionalChat.isPresent()) {
+                    notificationService.sendNotification(new Notification(IdGenerator.getUniqueId(), whoId, currentTime,
+                            String.format("Новый метч с %s %s!", whom.getUserInfo().getName(), whom.getUserInfo().getSurname()), false, NotificationType.MATCH));
 
-            notificationService.sendNotification(new Notification(IdGenerator.getUniqueId(), matchedUser, currentTime,
-                    String.format("Новый метч с %s %s!", userById.get().getUserInfo().getName(), userById.get().getUserInfo().getSurname()), false, NotificationType.MATCH));
-            Chat chat = new Chat(IdGenerator.getUniqueId(), List.of(userId, matchedUser), new ArrayList<>());
-            chatService.addChat(chat);
-            System.out.println("Matched. Send notifications");
+                    notificationService.sendNotification(new Notification(IdGenerator.getUniqueId(), whomId, currentTime,
+                            String.format("Новый метч с %s %s!", who.getUserInfo().getName(), who.getUserInfo().getSurname()), false, NotificationType.MATCH));
 
-            return new Response<>(true, ResponseStatus.CREATED, "Match created");
+                }
+            }
+    }
+
+    @Override
+    public Response<Match> match(Match match) {
+        Long userId = match.getWhoId();
+        Long matchedUser = match.getWhomId();
+        Optional<Match> optionalMatch = matchService.addMatch(match, this::onMutualMatch);
+        if (optionalMatch.isPresent()) {
+            return new Response<>(optionalMatch.get(), ResponseStatus.CREATED, "");
         }
-
-        return new Response<>(true, ResponseStatus.OK, "");
+        String errorMessage = String.format("Match with users [%d, %d] already exists!", userId, matchedUser);
+        log.error(errorMessage);
+        return new Response<>(null, ResponseStatus.CONFLICT, errorMessage);
     }
 
     @Override
     public Response<List<User>> available(Long id) {
         List<User> allUsers = userService.getAllUsers();
-        List<User> collect = allUsers.stream()
-                .filter(user -> !user.getId().equals(id))
-                .collect(Collectors.toList());
-        return new Response<>(collect, ResponseStatus.OK, "");
+        List<Long> matchedUserIds = matchService.getMatchedUserIds(id);
+        allUsers.removeIf(user -> user.getId().equals(id) || matchedUserIds.contains(user.getId()));
+        return new Response<>(allUsers, ResponseStatus.OK, "");
     }
 
     @Override
@@ -119,10 +146,90 @@ public class Controller implements AuthController, UserController, MatchControll
     }
 
     @Override
-    public Response<Chat> addMessage(ChatMessage chatMessage) {
-        Optional<Chat> chat = chatService.addMessage(chatMessage);
-        if (chat.isPresent()) {
-            return new Response<>(chat.get(), ResponseStatus.CREATED, "");
+    public Response<ChatMessage> addMessage(ChatMessage chatMessage) {
+        Optional<ChatMessage> chatMessageOptional = chatService.addMessage(chatMessage);
+        Optional<Chat> chatById = chatService.getChatById(chatMessage.getChatId());
+        if (chatMessageOptional.isPresent() && chatById.isPresent()) {
+            List<Long> participants = chatById.get().getParticipants();
+            for (Long participantId : participants) {
+                notificationService.sendNotification(
+                        new Notification(
+                                IdGenerator.getUniqueId(),
+                                participantId,
+                                Utils.getCurrentTime(),
+                                "У вас новое сообщение!",
+                                false,
+                                NotificationType.MESSAGE
+                        )
+                );
+            }
+            return new Response<>(chatMessageOptional.get(), ResponseStatus.CREATED, "");
+        }
+        return new Response<>(null, ResponseStatus.NOT_FOUND, "");
+    }
+
+    @Override
+    public Response<List<ChatMessage>> getChatMessages(Long chatId) {
+        Optional<List<ChatMessage>> chatMessages = chatService.getChatMessages(chatId);
+        if (chatMessages.isPresent()) {
+            return new Response<>(chatMessages.get(), ResponseStatus.OK, "");
+        }
+        return new Response<>(null, ResponseStatus.NOT_FOUND, "");
+    }
+
+    @Override
+    public Response<ChatMessage> getLastChatMessage(Long chatId) {
+        Optional<ChatMessage> chatLastMessage = chatService.getChatLastMessage(chatId);
+        if (chatLastMessage.isPresent()) {
+            return new Response<>(chatLastMessage.get(), ResponseStatus.OK, "");
+        }
+        return new Response<>(null, ResponseStatus.NOT_FOUND, "");
+    }
+
+    @Override
+    public Response<Chat> createGroupChat(CreateGroupChatRequest request) {
+        Chat chat = new Chat(
+                IdGenerator.getUniqueId(),
+                request.getParticipants()
+        );
+        ChatInfo chatInfo = new ChatInfo(
+                IdGenerator.getUniqueId(),
+                chat.getId(),
+                request.getName(),
+                request.getTopic(),
+                ""
+        );
+
+        try {
+            String[] paths = FileManager.saveChatPreview(request.getChatPreview(), String.format("chatId_%d", chat.getId()));
+            chatInfo.setPreviewPath(paths[0]);
+            Optional<Chat> optionalChat = chatService.addGroupChat(chat, chatInfo);
+            if (optionalChat.isPresent()) {
+                for (Long participantId : request.getParticipants()) {
+                    notificationService.sendNotification(
+                            new Notification(
+                                    IdGenerator.getUniqueId(),
+                                    participantId,
+                                    Utils.getCurrentTime(),
+                                    "С вашим участием был создан чат " + request.getName(),
+                                    false,
+                                    NotificationType.MESSAGE
+                            )
+                    );
+                }
+                return new Response<>(optionalChat.get(), ResponseStatus.CREATED, "");
+            }
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+        return new Response<>(null, ResponseStatus.CONFLICT, "");
+    }
+
+    @Override
+    public Response<ChatInfo> getChatInfo(Long chatId) {
+        Optional<ChatInfo> chatInfo = chatService.getChatInfo(chatId);
+        if (chatInfo.isPresent()) {
+            return new Response<>(chatInfo.get(), ResponseStatus.OK, "");
         }
         return new Response<>(null, ResponseStatus.NOT_FOUND, "");
     }

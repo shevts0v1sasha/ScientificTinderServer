@@ -3,18 +3,20 @@ package ru.tinder.model.chat;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
-
-import java.util.List;
+import org.springframework.web.multipart.MultipartFile;
 
 @Data
 @AllArgsConstructor
 @NoArgsConstructor
-public class Chat {
+public class ChatInfo {
 
     private Long id;
 
-    private List<Long> participants;
+    private Long chatId;
 
+    private String name;
 
-//    private List<ChatMessage> messages;
+    private String topic;
+
+    private String previewPath;
 }

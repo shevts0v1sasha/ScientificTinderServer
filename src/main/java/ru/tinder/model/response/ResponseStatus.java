@@ -5,5 +5,6 @@ public enum ResponseStatus {
     CREATED,
     UPDATED,
     NOT_FOUND,
-    BAD_REQUEST
+    BAD_REQUEST,
+    CONFLICT
 }

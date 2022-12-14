@@ -3,12 +3,10 @@ package ru.tinder.rest.user;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 import ru.tinder.controller.UserController;
 import ru.tinder.model.response.Response;
+import ru.tinder.model.response.ResponseStatus;
 import ru.tinder.model.user.User;
 import ru.tinder.service.userService.UserService;
 
@@ -33,6 +31,15 @@ public class UserRestController {
     @GetMapping
     public ResponseEntity<List<User>> getAllUsers() {
         return ResponseEntity.ok(userController.getAllUsers().getData());
+    }
+
+    @GetMapping("/liked")
+    public ResponseEntity<List<User>> getLikedUsers(@RequestParam("userId") Long userId) {
+        Response<List<User>> likedUsers = userController.getLikedUsers(userId);
+        if (likedUsers.getResponseStatus() == ResponseStatus.OK) {
+            return ResponseEntity.ok(likedUsers.getData());
+        }
+        return new ResponseEntity<>(HttpStatus.NOT_FOUND);
     }
 
 }
