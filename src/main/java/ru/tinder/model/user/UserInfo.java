@@ -29,4 +29,8 @@ public class UserInfo {
 
     private String linksToPublications;
 
+    private String avatarPath;
+
+    private String previewAvatarPath;
+
 }

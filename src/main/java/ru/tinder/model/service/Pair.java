@@ -1,4 +1,4 @@
-package ru.tinder.model;
+package ru.tinder.model.service;
 
 import lombok.AllArgsConstructor;
 import lombok.Data;
@@ -7,6 +7,7 @@ import lombok.NoArgsConstructor;
 @Data
 @AllArgsConstructor
 @NoArgsConstructor
-public class ChatMessage {
-    private String message;
+public class Pair<K, V> {
+    private K key;
+    private V value;
 }

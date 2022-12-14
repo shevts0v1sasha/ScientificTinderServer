@@ -1,19 +1,18 @@
-package ru.tinder.dto.user;
+package ru.tinder.dto.auth;
+
 
 import lombok.AllArgsConstructor;
-import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 import ru.tinder.model.user.Role;
 
-
 @Data
-@Builder
 @AllArgsConstructor
 @NoArgsConstructor
-public class UserDto {
+public class RegistrationRequest {
 
-    private Long id;
+    private String username;
+    private String password;
 
     private String name;
 
