@@ -51,4 +51,6 @@ public class AuthRestController {
     }
 
     public void lastTest() {}
+
+    public void esheOdinlastTest() {}
 }
