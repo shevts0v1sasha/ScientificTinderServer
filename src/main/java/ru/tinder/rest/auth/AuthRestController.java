@@ -49,4 +49,6 @@ public class AuthRestController {
         }
         return ResponseEntity.ok(user.getData());
     }
+
+    public void lastTest() {}
 }
